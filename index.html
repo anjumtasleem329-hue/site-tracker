@@ -5,14 +5,12 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Site Attendance Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
 <body class="bg-slate-100 min-h-screen p-3">
     <div class="max-w-md mx-auto space-y-4">
         
-        <!-- Top Bar -->
         <div class="bg-white p-4 rounded-2xl shadow-sm flex justify-between items-center">
             <div>
                 <h1 class="font-bold text-slate-800 text-lg">Site Attendance</h1>
@@ -21,21 +19,18 @@
             <button onclick="setupSupervisor()" class="text-xs bg-slate-100 px-3 py-1.5 rounded-lg font-medium text-slate-600">Change</button>
         </div>
 
-        <!-- Big Scan Button for Easy Tapping -->
         <button onclick="startScanner()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-5 rounded-2xl shadow-lg flex items-center justify-center gap-3 text-xl cursor-pointer">
             <i data-lucide="qr-code" class="w-8 h-8"></i>
             SCAN WORKER QR
         </button>
 
-        <!-- Sync Button -->
-        <button onclick="syncData()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl flex items-center justify-center gap-2 text-sm cursor-pointer">
-            <i data-lucide="refresh-cw" class="w-4 h-4"></i> Sync Master Roster
+        <button onclick="syncOfflineScans()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl flex items-center justify-center gap-2 text-sm cursor-pointer">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i> Upload Offline Logs (<span id="pendingCount">0</span>)
         </button>
 
-        <!-- Scanned Today Section -->
         <div class="bg-white p-4 rounded-2xl shadow-sm space-y-3">
             <h2 class="font-bold text-slate-800 text-sm flex justify-between">
-                <span>Present Today</span>
+                <span>Scanned Today</span>
                 <span id="presentCount" class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full text-xs">0</span>
             </h2>
             <div id="logList" class="divide-y divide-slate-100 text-sm max-h-60 overflow-y-auto">
@@ -57,9 +52,9 @@
     </div>
 
     <script>
-        const WEB_APP_URL = "const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxP6vKQcUcV7sKNQi8eMdTDvVoQ3G58y9RaGrbEcFgHZhyZFyVPIVhs8nlmx1GkJlDxGA/exec";";
-        let roster = [];
-        let scanned = new Set();
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbw8BB4EKtclw4raoL-phCA_uiW_bpe72JKw-UKFYh9K8hCLfrhIXT0PLOhkq4ELO9ycQg/exec";
+        let roster = JSON.parse(localStorage.getItem("offline_roster") || "[]");
+        let offlineQueue = JSON.parse(localStorage.getItem("offline_queue") || "[]");
         let qrScanner = null;
 
         function setupSupervisor() {
@@ -70,21 +65,20 @@
             document.getElementById("supName").textContent = (localStorage.getItem("sup_name") || "Not set") + " (" + (localStorage.getItem("sup_loc") || "No zone") + ")";
         }
 
-        async function syncData() {
+        async function fetchRoster() {
+            if (!navigator.onLine) return;
             try {
                 let res = await fetch(WEB_APP_URL);
                 let data = await res.json();
-                roster = data.roster || [];
-                alert("Synced! Loaded " + roster.length + " workers from sheet.");
-            } catch(e) {
-                alert("Sync failed: Check internet connection.");
-            }
+                if (data.roster) {
+                    roster = data.roster;
+                    localStorage.setItem("offline_roster", JSON.stringify(roster));
+                }
+            } catch(e) {}
         }
 
         function startScanner() {
-            if (!localStorage.getItem("sup_name")) {
-                setupSupervisor();
-            }
+            if (!localStorage.getItem("sup_name")) setupSupervisor();
             document.getElementById("scanModal").classList.remove("hidden");
             document.getElementById("scanModal").classList.add("flex");
             
@@ -94,7 +88,7 @@
                 { fps: 10, qrbox: { width: 250, height: 250 } },
                 onScanSuccess
             ).catch(err => {
-                document.getElementById("scanStatus").textContent = "Camera error: Allow camera access in browser.";
+                document.getElementById("scanStatus").textContent = "Camera error: Allow camera access.";
             });
         }
 
@@ -110,47 +104,72 @@
 
         function onScanSuccess(decodedText) {
             let empId = decodedText.trim();
-            if (scanned.has(empId)) {
-                document.getElementById("scanStatus").textContent = "⚠️ Already Scanned!";
-                return;
-            }
-
             let worker = roster.find(w => w.id === empId);
-            scanned.add(empId);
-            
-            // Send to Google Sheet automatically
-            fetch(WEB_APP_URL, {
-                method: "POST",
-                mode: "no-cors",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    id: empId,
-                    name: worker ? worker.name : "Unknown",
-                    designation: worker ? worker.designation : "-",
-                    company: worker ? worker.company : "-",
-                    status: "PRESENT",
-                    supervisor: localStorage.getItem("sup_name"),
-                    location: localStorage.getItem("sup_loc")
-                })
-            });
 
-            document.getElementById("scanStatus").textContent = "✅ Scanned: " + (worker ? worker.name : empId);
-            updateList(empId, worker ? worker.name : "Worker " + empId);
-            setTimeout(stopScanner, 1200);
+            let record = {
+                id: empId,
+                name: worker ? worker.name : "Unknown",
+                designation: worker ? worker.designation : "-",
+                company: worker ? worker.company : "-",
+                status: "PRESENT",
+                supervisor: localStorage.getItem("sup_name"),
+                location: localStorage.getItem("sup_loc"),
+                timestamp: new Date().toISOString()
+            };
+
+            // Save to Local Queue
+            offlineQueue.push(record);
+            localStorage.setItem("offline_queue", JSON.stringify(offlineQueue));
+            
+            updateUI();
+            document.getElementById("scanStatus").textContent = "✅ Saved: " + record.name;
+            setTimeout(stopScanner, 1000);
+
+            // Attempt online sync
+            if (navigator.onLine) syncOfflineScans();
         }
 
-        function updateList(id, name) {
+        async function syncOfflineScans() {
+            if (offlineQueue.length === 0) {
+                alert("No pending offline scans.");
+                return;
+            }
+            
+            let queueCopy = [...offlineQueue];
+            for (let item of queueCopy) {
+                try {
+                    await fetch(WEB_APP_URL, {
+                        method: "POST",
+                        mode: "no-cors",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify(item)
+                    });
+                } catch(e) {
+                    break; 
+                }
+            }
+
+            offlineQueue = [];
+            localStorage.setItem("offline_queue", JSON.stringify([]));
+            updateUI();
+            alert("All offline attendance logs uploaded to Google Sheet!");
+        }
+
+        function updateUI() {
+            document.getElementById("pendingCount").textContent = offlineQueue.length;
+            document.getElementById("presentCount").textContent = offlineQueue.length;
             let list = document.getElementById("logList");
-            if (scanned.size === 1) list.innerHTML = "";
-            list.innerHTML = `<div class="py-2 flex justify-between items-center"><span class="font-medium text-slate-800">${name}</span><span class="text-xs text-slate-400">${id}</span></div>` + list.innerHTML;
-            document.getElementById("presentCount").textContent = scanned.size;
+            if (offlineQueue.length > 0) list.innerHTML = "";
+            offlineQueue.forEach(item => {
+                list.innerHTML = `<div class="py-2 flex justify-between items-center"><span class="font-medium text-slate-800">${item.name}</span><span class="text-xs text-slate-400">${item.id}</span></div>` + list.innerHTML;
+            });
         }
 
         document.addEventListener("DOMContentLoaded", () => {
             if (window.lucide) lucide.createIcons();
-            if (!localStorage.getItem("sup_name")) setupSupervisor();
-            else setupSupervisor();
-            syncData();
+            setupSupervisor();
+            fetchRoster();
+            updateUI();
         });
     </script>
 </body>
