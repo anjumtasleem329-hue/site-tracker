@@ -3,403 +3,154 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Site Manpower & Attendance Tracker</title>
+    <title>Site Attendance Tracker</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://unpkg.com/lucide@latest"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
 </head>
-<body class="bg-slate-50 min-h-screen p-4">
-    <div class="max-w-4xl mx-auto space-y-6">
-        <!-- Header -->
-        <header class="bg-white p-4 rounded-xl shadow flex flex-wrap justify-between items-center gap-4">
+<body class="bg-slate-100 min-h-screen p-3">
+    <div class="max-w-md mx-auto space-y-4">
+        
+        <!-- Top Bar -->
+        <div class="bg-white p-4 rounded-2xl shadow-sm flex justify-between items-center">
             <div>
-                <h1 class="text-xl font-bold text-slate-800">Site Attendance & Absentee Tracker</h1>
-                <p class="text-xs text-slate-500">Live Central Database Connected</p>
-                <p class="text-xs text-indigo-600 font-semibold mt-1">Supervisor: <span id="supervisorLabel">-</span> | Location: <span id="locationLabel">-</span> <button onclick="changeSession()" class="underline text-slate-400 hover:text-slate-600 cursor-pointer font-normal">(change)</button></p>
+                <h1 class="font-bold text-slate-800 text-lg">Site Attendance</h1>
+                <p class="text-xs text-slate-500">Supervisor: <span id="supName" class="font-semibold text-slate-700">-</span></p>
             </div>
-            <div class="flex gap-2">
-                <button onclick="loadRoster()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer">
-                    <i data-lucide="refresh-cw" class="w-4 h-4"></i> Sync Roster
-                </button>
-                <button onclick="exportReport()" class="bg-rose-600 hover:bg-rose-500 text-white px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer">
-                    <i data-lucide="file-spreadsheet" class="w-4 h-4"></i> Export Report
-                </button>
-                <button onclick="openScanner()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer">
-                    <i data-lucide="scan-line" class="w-4 h-4"></i> Scan QR
-                </button>
-                <button onclick="printBadges()" class="bg-slate-600 hover:bg-slate-500 text-white px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer">
-                    <i data-lucide="printer" class="w-4 h-4"></i> Print QR Badges
-                </button>
-            </div>
-        </header>
+            <button onclick="setupSupervisor()" class="text-xs bg-slate-100 px-3 py-1.5 rounded-lg font-medium text-slate-600">Change</button>
+        </div>
 
-        <!-- Search Bar and Table -->
-        <div class="bg-white p-4 rounded-xl shadow space-y-4">
-            <div class="flex gap-2">
-                <input type="text" id="empSearch" placeholder="Search by ID, Name, or Designation..." class="flex-1 border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-                <button onclick="searchWorker()" class="bg-slate-800 text-white px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer">Search</button>
-            </div>
-            
-            <div class="overflow-x-auto">
-                <table class="w-full text-left border-collapse">
-                    <thead>
-                        <tr class="bg-slate-100 text-slate-600 text-xs uppercase tracking-wider">
-                            <th class="p-3">Emp ID</th>
-                            <th class="p-3">Name</th>
-                            <th class="p-3">Designation</th>
-                            <th class="p-3">Company</th>
-                            <th class="p-3 text-right">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody id="workerTableBody" class="divide-y divide-slate-200 text-sm">
-                        <tr><td colspan="5" class="p-4 text-center text-slate-400">Click "Sync Roster" to load workers.</td></tr>
-                    </tbody>
-                </table>
+        <!-- Big Scan Button for Easy Tapping -->
+        <button onclick="startScanner()" class="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold py-5 rounded-2xl shadow-lg flex items-center justify-center gap-3 text-xl cursor-pointer">
+            <i data-lucide="qr-code" class="w-8 h-8"></i>
+            SCAN WORKER QR
+        </button>
+
+        <!-- Sync Button -->
+        <button onclick="syncData()" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-3 rounded-xl flex items-center justify-center gap-2 text-sm cursor-pointer">
+            <i data-lucide="refresh-cw" class="w-4 h-4"></i> Sync Master Roster
+        </button>
+
+        <!-- Scanned Today Section -->
+        <div class="bg-white p-4 rounded-2xl shadow-sm space-y-3">
+            <h2 class="font-bold text-slate-800 text-sm flex justify-between">
+                <span>Present Today</span>
+                <span id="presentCount" class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-full text-xs">0</span>
+            </h2>
+            <div id="logList" class="divide-y divide-slate-100 text-sm max-h-60 overflow-y-auto">
+                <p class="text-slate-400 text-center py-4 text-xs">No scans yet today.</p>
             </div>
         </div>
     </div>
 
-    <!-- Supervisor / Location Modal -->
-    <div id="supervisorModal" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-xl p-4 w-full max-w-sm space-y-3">
-            <h2 class="font-bold text-slate-800">Enter Your Details</h2>
-            <p class="text-xs text-slate-500">This tags every check-in with who scanned it and where.</p>
-            <input type="text" id="supervisorInput" placeholder="Supervisor name" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <input type="text" id="locationInput" placeholder="Location / Zone" class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500">
-            <button onclick="saveSession()" class="w-full bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer">Save</button>
-        </div>
-    </div>
-
-    <!-- QR Scanner Modal -->
-    <div id="scannerModal" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50 p-4">
-        <div class="bg-white rounded-xl p-4 w-full max-w-sm space-y-3">
+    <!-- Scanner Modal -->
+    <div id="scanModal" class="fixed inset-0 bg-black/80 hidden flex-col items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl p-4 w-full max-w-sm space-y-4">
             <div class="flex justify-between items-center">
-                <h2 class="font-bold text-slate-800">Scan Worker QR</h2>
-                <button onclick="closeScanner()" class="text-slate-400 hover:text-slate-600 cursor-pointer">
-                    <i data-lucide="x" class="w-5 h-5"></i>
-                </button>
+                <h3 class="font-bold text-slate-800">Point Camera at QR Badge</h3>
+                <button onclick="stopScanner()" class="bg-slate-100 p-2 rounded-full"><i data-lucide="x" class="w-5 h-5"></i></button>
             </div>
-            <div id="qr-reader" class="w-full rounded-lg overflow-hidden"></div>
-            <div id="scanStatus" class="text-center text-sm font-semibold text-slate-500 py-2">Point camera at a worker's QR code</div>
+            <div id="reader" class="w-full rounded-xl overflow-hidden bg-black"></div>
+            <p id="scanStatus" class="text-center font-semibold text-sm text-slate-600">Opening camera...</p>
         </div>
     </div>
 
     <script>
-        const WEB_APP_URL = "const WEB_APP_URL = "YOUR_COPIED_WEB_APP_URL_HERE";";
-        let workerData = [];
-        let scannedIds = new Set();
-        let attendanceMeta = {};
-        let supervisorName = localStorage.getItem('supervisorName') || '';
-        let locationName = localStorage.getItem('locationName') || '';
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxY0Ijgk312_Kad9GSJyYI4rd3h_vPTOOYwBV8_cw0HCK4vZd7TkKl5Hi5jwBvuS86L/exec";
+        let roster = [];
+        let scanned = new Set();
+        let qrScanner = null;
 
-        function initSupervisor() {
-            if (!supervisorName || !locationName) {
-                document.getElementById('supervisorModal').classList.remove('hidden');
-                document.getElementById('supervisorModal').classList.add('flex');
-            } else {
-                document.getElementById('supervisorLabel').textContent = supervisorName;
-                document.getElementById('locationLabel').textContent = locationName;
-            }
+        function setupSupervisor() {
+            let name = prompt("Enter Supervisor Name:", localStorage.getItem("sup_name") || "");
+            let loc = prompt("Enter Location / Site Zone:", localStorage.getItem("sup_loc") || "");
+            if (name) localStorage.setItem("sup_name", name);
+            if (loc) localStorage.setItem("sup_loc", loc);
+            document.getElementById("supName").textContent = (localStorage.getItem("sup_name") || "Not set") + " (" + (localStorage.getItem("sup_loc") || "No zone") + ")";
         }
 
-        function saveSession() {
-            const sup = document.getElementById('supervisorInput').value.trim();
-            const loc = document.getElementById('locationInput').value.trim();
-            if (!sup || !loc) {
-                alert("Please enter both your name and location.");
-                return;
-            }
-            supervisorName = sup;
-            locationName = loc;
-            localStorage.setItem('supervisorName', sup);
-            localStorage.setItem('locationName', loc);
-            document.getElementById('supervisorLabel').textContent = sup;
-            document.getElementById('locationLabel').textContent = loc;
-            document.getElementById('supervisorModal').classList.add('hidden');
-            document.getElementById('supervisorModal').classList.remove('flex');
-        }
-
-        function changeSession() {
-            document.getElementById('supervisorInput').value = supervisorName;
-            document.getElementById('locationInput').value = locationName;
-            document.getElementById('supervisorModal').classList.remove('hidden');
-            document.getElementById('supervisorModal').classList.add('flex');
-        }
-
-        async function loadRoster() {
+        async function syncData() {
             try {
-                const tbody = document.getElementById("workerTableBody");
-                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-indigo-600 font-semibold">Syncing with Google Sheets...</td></tr>`;
-
-                const res = await fetch(WEB_APP_URL, { redirect: "follow" });
-                if (!res.ok) throw new Error("HTTP error! Status: " + res.status);
-                
-                const data = await res.json();
-                workerData = data.roster || [];
-                scannedIds = new Set(data.presentIds || []);
-                attendanceMeta = { ...(data.attendance || {}), ...attendanceMeta };
-                renderTable(workerData);
-                if (window.lucide) lucide.createIcons();
-            } catch (err) {
-                alert("Mobile Sync Failed: " + err.message);
-                const tbody = document.getElementById("workerTableBody");
-                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-rose-500">Failed to load. Error: ${err.message}</td></tr>`;
+                let res = await fetch(WEB_APP_URL);
+                let data = await res.json();
+                roster = data.roster || [];
+                alert("Synced! Loaded " + roster.length + " workers from sheet.");
+            } catch(e) {
+                alert("Sync failed: Check internet connection.");
             }
         }
 
-        function renderTable(data) {
-            const tbody = document.getElementById("workerTableBody");
-            if (data.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="5" class="p-4 text-center text-slate-400">No workers found in Master Roster.</td></tr>`;
-                return;
+        function startScanner() {
+            if (!localStorage.getItem("sup_name")) {
+                setupSupervisor();
             }
-            tbody.innerHTML = data.map(w => `
-                <tr class="hover:bg-slate-50">
-                    <td class="p-3 font-medium text-slate-700">${w.id}</td>
-                    <td class="p-3 text-slate-800">${w.name}</td>
-                    <td class="p-3 text-slate-600">${w.designation}</td>
-                    <td class="p-3 text-slate-600">${w.company}</td>
-                    <td class="p-3 text-right">
-                        <button onclick="markAttendance('${w.id}')" class="px-3 py-1.5 rounded text-xs font-semibold cursor-pointer ${scannedIds.has(w.id) ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-900 text-white hover:bg-slate-800'}">
-                            ${scannedIds.has(w.id) ? 'Present' : 'Check In'}
-                        </button>
-                    </td>
-                </tr>
-            `).join('');
-        }
-
-        async function markAttendance(id) {
-            const worker = workerData.find(w => w.id === id);
-            if (!worker) return;
-            if (!supervisorName || !locationName) {
-                alert("Please enter your supervisor name and location first.");
-                changeSession();
-                return;
-            }
-
-            scannedIds.add(id);
-            const now = new Date();
-            attendanceMeta[id] = { supervisor: supervisorName, location: locationName, time: now.toLocaleString() };
-            renderTable(workerData);
-
-            try {
-                await fetch(WEB_APP_URL, {
-                    method: 'POST',
-                    mode: 'no-cors',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ ...worker, status: 'PRESENT', supervisor: supervisorName, location: locationName })
-                });
-            } catch (err) {
-                console.error("Sync error:", err);
-            }
-        }
-
-        function exportReport() {
-            if (workerData.length === 0) {
-                alert("Please sync the roster first.");
-                return;
-            }
-            const today = new Date().toISOString().split('T')[0];
-
-            const attendanceData = workerData.map((w, i) => {
-                const present = scannedIds.has(w.id);
-                const meta = attendanceMeta[w.id] || {};
-                return {
-                    "S.No": i + 1,
-                    "Employee ID": w.id,
-                    "Full Name": w.name,
-                    "Designation": w.designation,
-                    "Company": w.company,
-                    "Status": present ? "PRESENT" : "ABSENT",
-                    "Supervisor": present ? (meta.supervisor || "") : "",
-                    "Location": present ? (meta.location || "") : "",
-                    "Check-in Time": present ? (meta.time || "") : "",
-                    "Date": today
-                };
+            document.getElementById("scanModal").classList.remove("hidden");
+            document.getElementById("scanModal").classList.add("flex");
+            
+            qrScanner = new Html5Qrcode("reader");
+            qrScanner.start(
+                { facingMode: "environment" },
+                { fps: 10, qrbox: { width: 250, height: 250 } },
+                onScanSuccess
+            ).catch(err => {
+                document.getElementById("scanStatus").textContent = "Camera error: Allow camera access in browser.";
             });
-
-            const supervisorCounts = {};
-            workerData.forEach(w => {
-                if (scannedIds.has(w.id)) {
-                    const sup = (attendanceMeta[w.id] || {}).supervisor || "Unknown";
-                    supervisorCounts[sup] = (supervisorCounts[sup] || 0) + 1;
-                }
-            });
-            const totalPresent = scannedIds.size;
-            const totalAbsent = workerData.length - totalPresent;
-
-            const summaryData = Object.keys(supervisorCounts).map(sup => ({
-                "Supervisor": sup,
-                "Workers Checked In": supervisorCounts[sup]
-            }));
-            summaryData.push({ "Supervisor": "", "Workers Checked In": "" });
-            summaryData.push({ "Supervisor": "TOTAL PRESENT", "Workers Checked In": totalPresent });
-            summaryData.push({ "Supervisor": "TOTAL ABSENT", "Workers Checked In": totalAbsent });
-            summaryData.push({ "Supervisor": "TOTAL WORKERS", "Workers Checked In": workerData.length });
-
-            const wb = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(attendanceData), "Attendance");
-            XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(summaryData), "Summary by Supervisor");
-            XLSX.writeFile(wb, `Site_Attendance_Report_${today}.xlsx`);
         }
 
-        function searchWorker() {
-            const query = document.getElementById("empSearch").value.toLowerCase();
-            const filtered = workerData.filter(w => 
-                w.id.toLowerCase().includes(query) || 
-                w.name.toLowerCase().includes(query) ||
-                w.designation.toLowerCase().includes(query)
-            );
-            renderTable(filtered);
-        }
-
-        let html5QrCode = null;
-        let lastScanId = null;
-        let lastScanTime = 0;
-        let refreshIntervalId = null;
-
-        function openScanner() {
-            if (workerData.length === 0) {
-                alert("Please sync the roster first.");
-                return;
+        function stopScanner() {
+            if (qrScanner) {
+                qrScanner.stop().then(() => {
+                    qrScanner.clear();
+                    document.getElementById("scanModal").classList.add("hidden");
+                    document.getElementById("scanModal").classList.remove("flex");
+                }).catch(() => {});
             }
-            const modal = document.getElementById('scannerModal');
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
-            if (window.lucide) lucide.createIcons();
-
-            const statusEl = document.getElementById('scanStatus');
-            statusEl.textContent = "Starting camera...";
-            statusEl.className = "text-center text-sm font-semibold text-slate-500 py-2";
-
-            if (html5QrCode) {
-                html5QrCode.clear();
-            }
-
-            html5QrCode = new Html5Qrcode("qr-reader");
-
-            Html5Qrcode.getCameras().then(devices => {
-                if (devices && devices.length) {
-                    const cameraId = devices[devices.length - 1].id;
-                    html5QrCode.start(
-                        cameraId,
-                        { fps: 10, qrbox: { width: 220, height: 220 } },
-                        onScanSuccess,
-                        () => {}
-                    ).then(() => {
-                        statusEl.textContent = "Point camera at a worker's QR code";
-                    }).catch(err => {
-                        statusEl.textContent = "Camera start failed: " + err;
-                        statusEl.className = "text-center text-sm font-semibold text-rose-600 py-2";
-                    });
-                } else {
-                    statusEl.textContent = "No cameras detected on device.";
-                }
-            }).catch(err => {
-                statusEl.textContent = "Permission denied or camera error: " + err;
-                statusEl.className = "text-center text-sm font-semibold text-rose-600 py-2";
-            });
-
-            refreshIntervalId = setInterval(loadRoster, 15000);
-        }
-
-        function closeScanner() {
-            if (html5QrCode) {
-                html5QrCode.stop().then(() => html5QrCode.clear()).catch(() => {});
-                html5QrCode = null;
-            }
-            if (refreshIntervalId) {
-                clearInterval(refreshIntervalId);
-                refreshIntervalId = null;
-            }
-            const modal = document.getElementById('scannerModal');
-            modal.classList.add('hidden');
-            modal.classList.remove('flex');
         }
 
         function onScanSuccess(decodedText) {
-            const id = (decodedText || "").trim();
-            const now = Date.now();
-            if (id === lastScanId && now - lastScanTime < 3000) return;
-            lastScanId = id;
-            lastScanTime = now;
-
-            const statusEl = document.getElementById('scanStatus');
-            const worker = workerData.find(w => w.id === id);
-            if (worker) {
-                markAttendance(id);
-                statusEl.textContent = `✅ Checked in: ${worker.name}`;
-                statusEl.className = "text-center text-sm font-semibold text-emerald-600 py-2";
-            } else {
-                statusEl.textContent = `❌ Unknown ID: ${id}`;
-                statusEl.className = "text-center text-sm font-semibold text-rose-600 py-2";
+            let empId = decodedText.trim();
+            if (scanned.has(empId)) {
+                document.getElementById("scanStatus").textContent = "⚠️ Already Scanned!";
+                return;
             }
+
+            let worker = roster.find(w => w.id === empId);
+            scanned.add(empId);
+            
+            // Send to Google Sheet automatically
+            fetch(WEB_APP_URL, {
+                method: "POST",
+                mode: "no-cors",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    id: empId,
+                    name: worker ? worker.name : "Unknown",
+                    designation: worker ? worker.designation : "-",
+                    company: worker ? worker.company : "-",
+                    status: "PRESENT",
+                    supervisor: localStorage.getItem("sup_name"),
+                    location: localStorage.getItem("sup_loc")
+                })
+            });
+
+            document.getElementById("scanStatus").textContent = "✅ Scanned: " + (worker ? worker.name : empId);
+            updateList(empId, worker ? worker.name : "Worker " + empId);
+            setTimeout(stopScanner, 1200);
         }
 
-        function printBadges() {
-            if (workerData.length === 0) {
-                alert("Please sync the roster first.");
-                return;
-            }
-
-            const printWindow = window.open('', '_blank');
-            if (!printWindow) {
-                alert("Popup blocked! Please allow popups for this site in your browser settings.");
-                return;
-            }
-
-            const badgesHtml = workerData.map(worker => {
-                const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=${encodeURIComponent(worker.id)}`;
-                return `
-                    <div class="badge">
-                        <img src="${qrUrl}" alt="QR" class="qr-img" onload="checkImagesLoaded()"/>
-                        <div class="name">${worker.name}</div>
-                        <div class="meta">${worker.id} • ${worker.designation}</div>
-                        <div class="company">${worker.company}</div>
-                    </div>
-                `;
-            }).join('');
-
-            printWindow.document.write(`
-                <!DOCTYPE html>
-                <html>
-                <head>
-                    <title>Worker QR Badges</title>
-                    <style>
-                        body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 20px; }
-                        .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-                        .badge { border: 1px solid #cbd5e1; border-radius: 8px; padding: 12px; text-align: center; page-break-inside: avoid; }
-                        .qr-img { width: 110px; height: 110px; margin: 0 auto 8px auto; display: block; }
-                        .name { font-weight: bold; font-size: 14px; color: #0f172a; margin-bottom: 2px; }
-                        .meta { font-size: 11px; color: #475569; }
-                        .company { font-size: 10px; color: #64748b; font-weight: 600; text-transform: uppercase; margin-top: 4px; }
-                        @media print { .badge { break-inside: avoid; } }
-                    </style>
-                </head>
-                <body>
-                    <div class="grid">${badgesHtml}</div>
-                    <script>
-                        let loadedCount = 0;
-                        const totalImages = ${workerData.length};
-                        function checkImagesLoaded() {
-                            loadedCount++;
-                            if (loadedCount >= totalImages) {
-                                setTimeout(() => { window.print(); }, 300);
-                            }
-                        }
-                        setTimeout(() => { window.print(); }, 3000);
-                    <\/script>
-                </body>
-                </html>
-            `);
-            printWindow.document.close();
+        function updateList(id, name) {
+            let list = document.getElementById("logList");
+            if (scanned.size === 1) list.innerHTML = "";
+            list.innerHTML = `<div class="py-2 flex justify-between items-center"><span class="font-medium text-slate-800">${name}</span><span class="text-xs text-slate-400">${id}</span></div>` + list.innerHTML;
+            document.getElementById("presentCount").textContent = scanned.size;
         }
 
         document.addEventListener("DOMContentLoaded", () => {
             if (window.lucide) lucide.createIcons();
-            initSupervisor();
+            if (!localStorage.getItem("sup_name")) setupSupervisor();
+            else setupSupervisor();
+            syncData();
         });
     </script>
 </body>
