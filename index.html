@@ -87,7 +87,7 @@
     </div>
 
     <script>
-        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbz6V3skGJoeNwJb8qkbL7S-Qiz-4L9TB4fVOJNXgkAS5oOZCbbl1Ow14fczLyfcg4d7GQ/exec";
+        const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbxY0Ijgk312_Kad9GSJyYI4rd3h_vPTOOYwBV8_cw0HCK4vZd7TkKl5Hi5jwBvuS86L/exec";
         let workerData = [];
         let scannedIds = new Set();
         let attendanceMeta = {};
@@ -141,7 +141,7 @@
                 scannedIds = new Set(data.presentIds || []);
                 attendanceMeta = { ...(data.attendance || {}), ...attendanceMeta };
                 renderTable(workerData);
-                lucide.createIcons();
+                if (window.lucide) lucide.createIcons();
             } catch (err) {
                 alert("Mobile Sync Failed: " + err.message);
                 const tbody = document.getElementById("workerTableBody");
@@ -268,7 +268,7 @@
             const modal = document.getElementById('scannerModal');
             modal.classList.remove('hidden');
             modal.classList.add('flex');
-            lucide.createIcons();
+            if (window.lucide) lucide.createIcons();
 
             const statusEl = document.getElementById('scanStatus');
             statusEl.textContent = "Starting camera...";
@@ -279,24 +279,26 @@
             }
 
             html5QrCode = new Html5Qrcode("qr-reader");
-            const config = { fps: 10, qrbox: { width: 220, height: 220 } };
 
-            html5QrCode.start(
-                { facingMode: { exact: "environment" } },
-                config,
-                onScanSuccess,
-                () => {}
-            ).catch(() => {
-                return html5QrCode.start(
-                    { facingMode: "environment" },
-                    config,
-                    onScanSuccess,
-                    () => {}
-                );
-            }).then(() => {
-                statusEl.textContent = "Point camera at a worker's QR code";
+            Html5Qrcode.getCameras().then(devices => {
+                if (devices && devices.length) {
+                    const cameraId = devices[devices.length - 1].id;
+                    html5QrCode.start(
+                        cameraId,
+                        { fps: 10, qrbox: { width: 220, height: 220 } },
+                        onScanSuccess,
+                        () => {}
+                    ).then(() => {
+                        statusEl.textContent = "Point camera at a worker's QR code";
+                    }).catch(err => {
+                        statusEl.textContent = "Camera start failed: " + err;
+                        statusEl.className = "text-center text-sm font-semibold text-rose-600 py-2";
+                    });
+                } else {
+                    statusEl.textContent = "No cameras detected on device.";
+                }
             }).catch(err => {
-                statusEl.textContent = "Camera access denied or unreadable: " + err;
+                statusEl.textContent = "Permission denied or camera error: " + err;
                 statusEl.className = "text-center text-sm font-semibold text-rose-600 py-2";
             });
 
@@ -396,7 +398,7 @@
         }
 
         document.addEventListener("DOMContentLoaded", () => {
-            lucide.createIcons();
+            if (window.lucide) lucide.createIcons();
             initSupervisor();
         });
     </script>
